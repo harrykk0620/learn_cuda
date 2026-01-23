@@ -1,0 +1,18 @@
+核函数 (Kernel function)
+
+1. 核函数在GPU上进行并行执行
+
+2. 注意：
+    1）限定词__global__修饰
+    2）返回值必须是void
+
+3. 形式 __global__ 和 void 关键词位置可以互换
+    1）__global__ void kernel_function(argument arg){}
+    2）void __global__ kernel_function(argument arg){}
+
+4. 注意事项
+    1）核函数只能访问GPU内存，CPU与GPU内存不能直接相互访问
+    2）核函数不能使用变长参数，参数个数要确定
+    3）核函数不能使用静态变量
+    4）核函数不能使用函数指针
+    5）核函数具有异步性
