@@ -1,0 +1,16 @@
+nvcc编译流程
+1. nvcc分离全部源代码为：1）主机(Host)代码是C/C++语法 2）设备(Device)代码是C/C++拓展语言编写
+2. nvcc先将设备代码编译为PTX (Parallel Thread Execution)伪汇编代码，这一步需要选项-arch=compute_XY指定一个【虚拟架构】的计算能力，用以确定代码中能够使用的CUDA功能
+3. 再将PTX代码编译成cubin代码，需要用选项-codesm_ZW指定一个【真实架构】的计算能力，用以确定可执行文件能够使用的GPU
+
+
+计算能力（Compute Capability）是 NVIDIA 用来标识其 GPU 架构能力和功能集的一个数字编号。它通常表示为 x.y 的形式，其中 x 是主版本号，y 是次版本号。这个编号直接反映了 GPU 的硬件特性、支持的 CUDA 指令集、内存模型以及其他低级功能。
+
+计算能力编号示例
+Maxwell 架构: 5.0, 5.2, 5.3
+Pascal 架构: 6.0, 6.1, 6.2
+Volta 架构: 7.0, 7.1 (Tesla V100, Titan V)
+Turing 架构: 7.5 (GeForce RTX 20xx, Quadro RTX, Tesla T4)
+Ampere 架构: 8.0, 8.6, 8.7, 8.9 (GeForce RTX 30xx, A100, A6000)
+Ada Lovelace 架构: 8.9 (GeForce RTX 40xx)
+Hopper 架构: 9.0 (H100)
