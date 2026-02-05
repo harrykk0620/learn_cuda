@@ -64,12 +64,13 @@
     }                                                                          \
 }
 
-inline double seconds()
+// 定义seconds函数，用于获取当前时间（以秒为单位）
+double seconds()
 {
-    struct timeval tp;
-    struct timezone tzp;
-    int i = gettimeofday(&tp, &tzp);
-    return ((double)tp.tv_sec + (double)tp.tv_usec * 1.e-6);
+    struct timespec tp;
+    clock_gettime(CLOCK_MONOTONIC, &tp);
+    return ((double)tp.tv_sec + (double)tp.tv_nsec * 1.e-9);
 }
+
 
 #endif // _COMMON_H
