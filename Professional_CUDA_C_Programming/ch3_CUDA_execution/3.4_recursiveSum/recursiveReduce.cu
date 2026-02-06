@@ -2,16 +2,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-const int MAX = 10;
-const int MIN = 0;
-
 #define BLOCK_SIZE 1024
 
+const int MAX = 10;
+const int MIN = 0;
 void initialData(int *data, const int size)
 {
     for (int i = 0; i < size; i++)
     {
         data[i] = MIN + rand() % (MAX - MIN + 1);
+        // data[i] = 1;
     }
 }
 
@@ -43,6 +43,7 @@ __global__ void recursiveReduceOnGPU(int *g_idata, int *g_odata, const int size)
     int* block_array = g_idata + blockIdx.x * blockDim.x; // block array的指针
     for (int stride = blockDim.x / 2; stride > 0; stride /= 2) // stride=0说明block求和完成
     {
+        // 错位求和，每次都把求和结果放在最前面，减少了warp divergence(1024线程为例，前16个warp进if分支求和，后16个不进)
         if (thread_id < stride)
         {
             // 这里每次都从global memory中读取数据，不高效
@@ -93,9 +94,55 @@ __global__ void recursiveReduceOnGPUShare(int *g_idata, int *g_odata, const int 
     g_odata[block_id] = s_data[0];
 }
 
+// 使用共享内存，使用add during loading，第一次loading时就完成一次reduce add
+__global__ void recursiveReduceOnGPUShare1(int *g_idata, int *g_odata, const int size)
+{
+    // 处理单个块的和
+    int block_id = blockIdx.x;
+    int thread_id = threadIdx.x;
+    
+    // 边界检查
+    int idx = block_id * blockDim.x + thread_id;
+    if (idx >= size) return;
+    
+    // 共享内存加载数据
+    __shared__ int s_data[BLOCK_SIZE/2];
+    int* block_array = g_idata + blockIdx.x * blockDim.x; // block array的指针
+    if (thread_id < BLOCK_SIZE / 2)
+    {
+        if (idx < size)
+        {
+            s_data[thread_id] = block_array[thread_id];
+            if (idx + BLOCK_SIZE / 2 < size)
+            {
+                s_data[thread_id] +=  block_array[thread_id + BLOCK_SIZE / 2];
+            }
+        }
+        else
+        {
+            s_data[thread_id] = 0;
+        }   
+    }
+
+    __syncthreads(); // 确保所有数据加载到共享内存
+
+    for (int stride = BLOCK_SIZE / 4; stride > 0; stride /= 2) // stride=0说明block求和完成
+    {
+        if (thread_id < stride)
+        {
+            // 这里每次都从global memory中读取数据，不高效
+            s_data[thread_id] += s_data[thread_id + stride]; // 每个block一定要被填满
+        }
+        __syncthreads(); // 确保了 Block 内的所有线程在继续执行下一条指令之前，都到达了这个同步点
+    }
+
+    // 往g_odata输出
+    g_odata[block_id] = s_data[0];
+}
+
 int main(int argc, char **argv) // argc是命令行参数数量，至少为1，argv[0]是程序本身名称
 {
-    int size = 1 << 22;
+    int size = 1 << 26;
     printf("Vector size %d\n", size);
     
     // CPU
@@ -142,6 +189,7 @@ int main(int argc, char **argv) // argc是命令行参数数量，至少为1，a
     // 思路：每个block求一个和到d_odata中，d_odata复制到h_block_sum中，cpu循环求和
     
     int *d_odata;
+
     int grid_size = size / block_size;
     cudaMalloc(&d_odata, grid_size * sizeof(int));
     recursiveReduceOnGPU<<<grid_size, block_size>>>(d_temp, d_odata, size);
@@ -176,12 +224,26 @@ int main(int argc, char **argv) // argc是命令行参数数量，至少为1，a
     end = seconds();
     printf("GPU sum1\t: %lld, time: %f (ms)\n", gpu_sum, (end - start) * 1000);
 
-
+    // 使用共享内存，使用add during loading
+    start = seconds();
+    cudaMalloc(&d_temp, size * sizeof(int));
+    cudaMemcpy(d_temp, data, size * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMalloc(&d_odata, grid_size * sizeof(int));
+    recursiveReduceOnGPUShare1<<<grid_size, block_size>>>(d_temp, d_odata, size);
+    cudaDeviceSynchronize();
+    h_block_sum = (int*)malloc(grid_size * sizeof(int));
+    cudaMemcpy(h_block_sum, d_odata, grid_size * sizeof(int), cudaMemcpyDeviceToHost);
+    gpu_sum = 0;
+    for (int i = 0; i < grid_size; i++)
+    {
+        gpu_sum += h_block_sum[i];
+    }
+    end = seconds();
+    printf("GPU sum2\t: %lld, time: %f (ms)\n", gpu_sum, (end - start) * 1000);
 
     free(data);
     free(temp);
     free(h_block_sum);
     cudaFree(d_temp);
     cudaFree(d_odata);
-
 }
