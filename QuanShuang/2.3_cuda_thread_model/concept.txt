@@ -1,0 +1,20 @@
+线程模型结构
+1. 线程模型重要概念 1）grid网格 2）block线程块
+    Grid 是一个或多个 Block 的集合。一个 Grid 包含的所有 Blocks 执行同一个核函数
+    Block 是一组 Thread 的集合。一个 Block 内部可以包含多个 Thread（最多 1024 个，取决于计算能力）。
+
+    一个核函数在主机中启动时，会有一个grid包含若干个block，一个block又包含多个thread
+2. 线程分块是逻辑上的画分，物理上线程不分块
+3. 配置线程：<<<grid_size, block_size>>>
+4. block_size最大1024，grid_size最大2^31-1 (Grid Size 可以很大，远超 SM 数量)
+
+
+一维线程模型
+1. 每个线程在核函数中都有唯一的身份标识
+2. 每个线程的唯一标识由<<<grid_size, block_size>>>确定；grid_size & block_size保存在内建变量（build-in variable 核函数可以直接访问）
+    目前考虑以为线程。
+    1）gridDim.x：该变量的数值等于grid_size的值
+    2）bolckDim.x：该变量的数值等于block_size的值
+3. 线程索引保存成内建变量(build-in variable)
+    1）blockIdx.x：该变量指定一个线程在一个网格中所在的线程块索引，范围为0 - gridDim.x-1
+    2）threadIdx.x：该变量指定一个线程在线程块中的索引，范围为0 - blockDim.x-1
